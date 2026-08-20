@@ -1,0 +1,1621 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Brain, Bot, Radio, Plus, Image, Search, Settings, Trash2, Edit, Check, X, ChevronDown, ChevronRight, RefreshCw, QrCode, Clock, CheckCircle, AlertCircle, Volume2, Layers, Save, Send, Mail, Hash, Gamepad2, Bell, BookOpen, MessageSquare, MessageCircle } from 'lucide-react';
+import { InputField, PasswordField, SelectField, SwitchField } from '@components/forms';
+import { ConfigCard, DynamicItemCard, AddItemDialog } from '@components/config';
+import WindowDots from '@components/layout/WindowDots';
+import MultimodalPanel from '@components/MultimodalPanel';
+import { ProviderSetting } from './components/ProviderSetting';
+import { useI18n } from '@i18n';
+
+import './ConfigPanel.css';
+
+const CONFIG_TABS = [
+  { key: 'providers', labelKey: 'config.providers', Icon: Brain, descKey: 'config.providers_desc' },
+  { key: 'agents', labelKey: 'config.agents', Icon: Bot, descKey: 'config.agents_desc' },
+  { key: 'library', labelKey: 'config.library', Icon: BookOpen, descKey: 'config.library_desc' },
+  { key: 'channels', labelKey: 'config.channels', Icon: Radio, descKey: 'config.channels_desc' },
+  { key: 'multimodal', labelKey: 'config.multimodal', Icon: Layers, descKey: 'config.multimodal_desc' }
+];
+
+function ConfigPanel({ config, setConfig, onSave, isSaving, sendWSMessage }) {
+  const { t } = useI18n();
+  const [configTab, setConfigTab] = useState('providers');
+  const [addDialog, setAddDialog] = useState({
+    isOpen: false,
+    type: '',
+    title: '',
+    placeholder: ''
+  });
+
+  // Agent Defaults State (from database)
+  const [agentDefaults, setAgentDefaults] = useState(null);
+  const [enabledModels, setEnabledModels] = useState([]);
+  const [isLoadingAgentDefaults, setIsLoadingAgentDefaults] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [availableTools, setAvailableTools] = useState([]);
+  const [isLoadingAvailableTools, setIsLoadingAvailableTools] = useState(false);
+  const [showToolsDropdown, setShowToolsDropdown] = useState(false);
+  const hasLoadedAgentDefaults = useRef(false);
+
+  // Channel Configs State (from database)
+  const [channelConfigs, setChannelConfigs] = useState([]);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
+
+  // Tool Configs State (from database)
+  const [toolConfigs, setToolConfigs] = useState([]);
+  const [isLoadingTools, setIsLoadingTools] = useState(false);
+
+  // WeChat QR Code State
+  const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState(null);
+  const [wechatQrToken, setWechatQrToken] = useState(null);
+  const [wechatStatus, setWechatStatus] = useState(null);
+  const [isWechatPolling, setIsWechatPolling] = useState(false);
+  const [qrCountdown, setQrCountdown] = useState(300);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successUserInfo, setSuccessUserInfo] = useState(null);
+  const [expandedChannels, setExpandedChannels] = useState({});
+  const wechatPollingRef = useRef(null);
+  const wechatPollingActiveRef = useRef(false);
+  const qrCountdownRef = useRef(null);
+
+  const loadConfig = useCallback(async (force = false) => {
+    if (hasLoadedAgentDefaults.current && !force) return;
+    try {
+      const response = await sendWSMessage('get_config', {}, 5000);
+      const loadedConfig = response.data || {};
+      setConfig(loadedConfig);
+    } catch (err) {
+      console.error("Failed to load config", err);
+    }
+  }, [sendWSMessage, setConfig]);
+
+  // Load Agent Defaults from database
+  const loadAgentDefaults = useCallback(async () => {
+    setIsLoadingAgentDefaults(true);
+    try {
+      const response = await sendWSMessage('agent_defaults_get', {}, 5000);
+      const defaults = response.data;
+      setAgentDefaults(defaults);
+      hasLoadedAgentDefaults.current = true;
+    } catch (err) {
+      console.error("Failed to load agent defaults", err);
+    } finally {
+      setIsLoadingAgentDefaults(false);
+    }
+  }, [sendWSMessage]);
+
+  // Load enabled models from all enabled providers
+  const loadEnabledModels = useCallback(async () => {
+    setIsLoadingModels(true);
+    try {
+      const response = await sendWSMessage('get_enabled_models', {}, 5000);
+      const models = response.data?.models || [];
+      setEnabledModels(models);
+    } catch (err) {
+      console.error("Failed to load enabled models", err);
+      setEnabledModels([]);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, [sendWSMessage]);
+
+  // Load available tools for agent defaults
+  const loadAvailableTools = useCallback(async () => {
+    setIsLoadingAvailableTools(true);
+    try {
+      const response = await sendWSMessage('subagent_get_available_tools', {}, 5000);
+      const tools = response.data?.tools || [];
+      setAvailableTools(tools);
+    } catch (err) {
+      console.error("Failed to load available tools", err);
+      setAvailableTools([]);
+    } finally {
+      setIsLoadingAvailableTools(false);
+    }
+  }, [sendWSMessage]);
+
+  // Load channel configs from database
+  const loadChannelConfigs = useCallback(async () => {
+    setIsLoadingChannels(true);
+    try {
+      const response = await sendWSMessage('channel_get_list', {}, 5000);
+      const channels = response.data?.channels || [];
+      setChannelConfigs(channels);
+    } catch (err) {
+      console.error("Failed to load channel configs", err);
+      setChannelConfigs([]);
+    } finally {
+      setIsLoadingChannels(false);
+    }
+  }, [sendWSMessage]);
+
+  // Load tool configs from database
+  const loadToolConfigs = useCallback(async () => {
+    setIsLoadingTools(true);
+    try {
+      const response = await sendWSMessage('tool_get_config', {}, 5000);
+      const tools = response.data?.tools || [];
+      setToolConfigs(tools);
+    } catch (err) {
+      console.error("Failed to load tool configs", err);
+      setToolConfigs([]);
+    } finally {
+      setIsLoadingTools(false);
+    }
+  }, [sendWSMessage]);
+
+  // Load TTS defaults and providers
+  useEffect(() => {
+    loadConfig();
+    loadAgentDefaults();
+    loadEnabledModels();
+    loadAvailableTools();
+    loadChannelConfigs();
+    loadToolConfigs();
+  }, []);
+
+  // Handle tab switch with data refresh
+  const handleTabSwitch = useCallback((tabKey) => {
+    setConfigTab(tabKey);
+    // Refresh data based on selected tab
+    switch (tabKey) {
+      case 'providers':
+        // ProviderSetting component handles its own data loading
+        break;
+      case 'agents':
+        loadAgentDefaults();
+        loadEnabledModels();
+        loadAvailableTools();
+        break;
+      case 'library':
+        loadAgentDefaults();
+        loadEnabledModels();
+        break;
+      case 'channels':
+        loadChannelConfigs();
+        break;
+      case 'multimodal':
+        // MultimodalPanel component handles its own data loading
+        break;
+      default:
+        break;
+    }
+  }, [loadAgentDefaults, loadEnabledModels, loadAvailableTools, loadChannelConfigs]);
+
+  const handleSave = async () => {
+    try {
+      // Save config file (for backward compatibility)
+      await onSave(config);
+
+      // Save agent defaults to database
+      if (agentDefaults) {
+        await sendWSMessage('agent_defaults_update', {
+          defaultProviderId: agentDefaults.defaultProviderId,
+          defaultModelId: agentDefaults.defaultModelId,
+          libraryExtractProviderId: agentDefaults.libraryExtractProviderId,
+          libraryExtractModelId: agentDefaults.libraryExtractModelId,
+          libraryExtractLanguage: agentDefaults.libraryExtractLanguage,
+          workspacePath: agentDefaults.workspacePath,
+          maxTokens: agentDefaults.maxTokens,
+          temperature: agentDefaults.temperature,
+          maxIterations: agentDefaults.maxIterations,
+          contextCompressionEnabled: agentDefaults.contextCompressionEnabled,
+          contextCompressionTurns: agentDefaults.contextCompressionTurns,
+          contextCompressionTokenThreshold: agentDefaults.contextCompressionTokenThreshold,
+          tools: agentDefaults.tools || [],
+        }, 5000);
+      }
+
+      await loadConfig(true);
+      await loadAgentDefaults();
+    } catch (e) {
+      alert(t('config.save_failed') + e.message);
+    }
+  };
+
+  // Update agent defaults field
+  const updateAgentDefaultField = (field, value) => {
+    setAgentDefaults(prev => prev ? { ...prev, [field]: value } : null);
+  };
+
+  // Toggle tool selection for agent defaults
+  const toggleTool = (toolName) => {
+    setAgentDefaults(prev => {
+      if (!prev) return null;
+      const currentTools = prev.tools || [];
+      const newTools = currentTools.includes(toolName)
+        ? currentTools.filter(t => t !== toolName)
+        : [...currentTools, toolName];
+      return { ...prev, tools: newTools };
+    });
+  };
+
+  // Handle model selection - updates both provider and model
+  const handleModelChange = (modelValue) => {
+    const selectedModel = enabledModels.find(m => m.value === modelValue);
+    if (selectedModel) {
+      setAgentDefaults(prev => prev ? {
+        ...prev,
+        defaultProviderId: selectedModel.providerId,
+        defaultProviderName: selectedModel.providerName,
+        defaultProviderDisplayName: selectedModel.providerDisplayName,
+        defaultModelId: selectedModel.modelDbId,
+        defaultModelName: selectedModel.modelId,
+        defaultModelDisplayName: selectedModel.modelDisplayName,
+      } : null);
+    }
+  };
+
+  // Handle library extract model selection
+  const handleLibraryExtractModelChange = (modelValue) => {
+    const selectedModel = enabledModels.find(m => m.value === modelValue);
+    if (selectedModel) {
+      setAgentDefaults(prev => prev ? {
+        ...prev,
+        libraryExtractProviderId: selectedModel.providerId,
+        libraryExtractProviderName: selectedModel.providerName,
+        libraryExtractProviderDisplayName: selectedModel.providerDisplayName,
+        libraryExtractModelId: selectedModel.modelDbId,
+        libraryExtractModelName: selectedModel.modelId,
+        libraryExtractModelDisplayName: selectedModel.modelDisplayName,
+      } : null);
+    }
+  };
+
+  // Handle library extract language selection
+  const handleLibraryExtractLanguageChange = (langValue) => {
+    setAgentDefaults(prev => prev ? { ...prev, libraryExtractLanguage: langValue } : null);
+  };
+
+  // Update channel config in database
+  const updateChannelConfig = async (channelName, updates) => {
+    const channel = channelConfigs.find(c => c.channelName === channelName);
+    if (!channel) return;
+
+    setChannelConfigs(prev => prev.map(c =>
+      c.channelName === channelName
+        ? { ...c, ...updates }
+        : c
+    ));
+
+    try {
+      await sendWSMessage('channel_update', {
+        channelName: channelName,
+        channelType: channel.channelType,
+        enabled: updates.enabled !== undefined ? updates.enabled : channel.enabled,
+        appId: updates.appId !== undefined ? updates.appId : channel.appId,
+        appSecret: updates.appSecret !== undefined ? updates.appSecret : channel.appSecret,
+        encryptKey: updates.encryptKey !== undefined ? updates.encryptKey : channel.encryptKey,
+        verificationToken: updates.verificationToken !== undefined ? updates.verificationToken : channel.verificationToken,
+        allowFrom: updates.allowFrom !== undefined ? updates.allowFrom : channel.allowFrom,
+        configJson: updates.configJson !== undefined ? updates.configJson : (channel.configJson || {}),
+      }, 5000);
+    } catch (err) {
+      console.error("Failed to update channel config", err);
+      setChannelConfigs(prev => prev.map(c =>
+        c.channelName === channelName ? channel : c
+      ));
+      alert(t('config.update_channel_failed') + err.message);
+    }
+  };
+
+  // Update tool config in database
+  const updateToolConfig = async (toolName, updates) => {
+    const tool = toolConfigs.find(t => t.toolName === toolName);
+    if (!tool) return;
+
+    try {
+      await sendWSMessage('tool_update_config', {
+        toolName: toolName,
+        enabled: updates.enabled !== undefined ? updates.enabled : tool.enabled,
+        timeout: updates.timeout !== undefined ? updates.timeout : tool.timeout,
+        restrictToWorkspace: updates.restrictToWorkspace !== undefined ? updates.restrictToWorkspace : tool.restrictToWorkspace,
+        searchApiKey: updates.searchApiKey !== undefined ? updates.searchApiKey : tool.searchApiKey,
+        searchMaxResults: updates.searchMaxResults !== undefined ? updates.searchMaxResults : tool.searchMaxResults,
+      }, 5000);
+
+      // Reload tool configs
+      await loadToolConfigs();
+    } catch (err) {
+      console.error("Failed to update tool config", err);
+      alert(t('config.update_tool_failed') + err.message);
+    }
+  };
+
+  const openAddDialog = (type) => {
+    const titles = { provider: t('config.add_provider_title'), channel: t('config.add_channel_title') };
+    const placeholders = { provider: t('config.add_provider_placeholder'), channel: t('config.add_channel_placeholder') };
+    setAddDialog({ isOpen: true, type, title: titles[type], placeholder: placeholders[type] });
+  };
+
+  const handleAddConfirm = (name) => {
+    switch (addDialog.type) {
+      case 'channel':
+        // Create new channel in database
+        sendWSMessage('channel_update', {
+          channelName: name,
+          channelType: name,
+          enabled: false,
+          appId: '',
+          appSecret: '',
+          encryptKey: '',
+          verificationToken: '',
+          allowFrom: [],
+          configJson: {},
+        }, 5000).then(() => loadChannelConfigs());
+        break;
+    }
+  };
+
+  const renderAgentDefaults = () => {
+    if (isLoadingAgentDefaults || !agentDefaults) {
+      return (
+        <ConfigCard title={t('config.agent_defaults_title')} icon="[BOT]">
+          <div className="empty-config">
+            <span>{t('status.loading')}</span>
+          </div>
+        </ConfigCard>
+      );
+    }
+
+    // Current model value for the select field
+    const currentModelValue = agentDefaults.defaultProviderId && agentDefaults.defaultModelName
+      ? `${agentDefaults.defaultProviderId}/${agentDefaults.defaultModelName}`
+      : '';
+
+    return (
+      <ConfigCard title={t('config.agent_defaults_title')} icon="[BOT]">
+        {/* Model Selection - Shows all enabled models from all enabled providers */}
+        <SelectField
+          label="Default Model"
+          value={currentModelValue}
+          onChange={handleModelChange}
+          options={enabledModels}
+          disabled={isLoadingModels || enabledModels.length === 0}
+        />
+        {enabledModels.length === 0 && !isLoadingModels && (
+          <div className="form-hint" style={{ color: '#ff6b6b', marginTop: '-10px', marginBottom: '10px' }}>
+            No enabled models found. Please enable providers and models in the PROVIDERS tab.
+          </div>
+        )}
+
+        <InputField
+          label="Workspace Path"
+          value={agentDefaults.workspacePath || ''}
+          onChange={(v) => updateAgentDefaultField('workspacePath', v)}
+          placeholder="/path/to/workspace"
+        />
+
+        <InputField
+          label="Max Tokens"
+          type="number"
+          value={agentDefaults.maxTokens || 8192}
+          onChange={(v) => updateAgentDefaultField('maxTokens', parseInt(v) || 8192)}
+          placeholder="8192"
+        />
+
+        <InputField
+          label="Temperature"
+          type="number"
+          step="0.1"
+          min="0"
+          max="2"
+          value={agentDefaults.temperature || 0.7}
+          onChange={(v) => updateAgentDefaultField('temperature', parseFloat(v) || 0.7)}
+          placeholder="0.7"
+        />
+
+        <InputField
+          label="Max Iterations"
+          type="number"
+          value={agentDefaults.maxIterations || 20}
+          onChange={(v) => updateAgentDefaultField('maxIterations', parseInt(v) || 20)}
+          placeholder="20"
+        />
+
+        <SwitchField
+          label="Context Compression"
+          checked={agentDefaults.contextCompressionEnabled || false}
+          onChange={(v) => updateAgentDefaultField('contextCompressionEnabled', v)}
+        />
+
+        {agentDefaults.contextCompressionEnabled && (
+          <>
+            <InputField
+              label="Compression Turns (Fallback)"
+              type="number"
+              value={agentDefaults.contextCompressionTurns || 10}
+              onChange={(v) => updateAgentDefaultField('contextCompressionTurns', parseInt(v) || 10)}
+              placeholder="10"
+            />
+            <InputField
+              label="Token Threshold"
+              type="number"
+              value={agentDefaults.contextCompressionTokenThreshold || 8000}
+              onChange={(v) => updateAgentDefaultField('contextCompressionTokenThreshold', parseInt(v) || 8000)}
+              placeholder="8000"
+            />
+          </>
+        )}
+
+        {/* Budget Settings */}
+        <div className="form-group" style={{ marginTop: '10px' }}>
+          <label>{t('config.budget')}</label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <InputField
+              label="Monthly Budget ($)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={agentDefaults.monthlyBudgetUsd ?? ''}
+              onChange={(v) => updateAgentDefaultField('monthlyBudgetUsd', v ? parseFloat(v) : null)}
+              placeholder="e.g. 10.00"
+            />
+            <InputField
+              label="Alert Threshold (%)"
+              type="number"
+              step="0.1"
+              min="0"
+              max="1"
+              value={(agentDefaults.budgetAlertThreshold ?? 0.8) * 100}
+              onChange={(v) => updateAgentDefaultField('budgetAlertThreshold', v ? parseFloat(v) / 100 : 0.8)}
+              placeholder="80"
+            />
+          </div>
+          <div className="form-hint" style={{ marginTop: '4px' }}>
+            Set a monthly spending cap. A banner appears when usage exceeds the threshold.
+          </div>
+        </div>
+
+        {/* Tools Selection */}
+        <div className="form-group" style={{ marginTop: '10px' }}>
+          <label>Enabled Tools ({(agentDefaults.tools || []).length} selected)</label>
+          <div className="dropdown-container dropdown-up">
+            <button
+              className="dropdown-trigger"
+              onClick={() => setShowToolsDropdown(!showToolsDropdown)}
+              disabled={isLoadingAvailableTools || availableTools.length === 0}
+            >
+              <span>
+                {(agentDefaults.tools || []).length > 0
+                  ? (agentDefaults.tools || []).slice(0, 3).join(', ') + ((agentDefaults.tools || []).length > 3 ? '...' : '')
+                  : t('config.all_default_tools')}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+            {showToolsDropdown && (
+              <div className="dropdown-menu">
+                {availableTools.map(tool => (
+                  <div
+                    key={tool.name}
+                    className={`dropdown-item ${(agentDefaults.tools || []).includes(tool.name) ? 'selected' : ''}`}
+                    onClick={() => toggleTool(tool.name)}
+                  >
+                    <span className="check">{(agentDefaults.tools || []).includes(tool.name) && <Check size={12} />}</span>
+                    <span>{tool.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {availableTools.length === 0 && !isLoadingAvailableTools && (
+            <div className="form-hint" style={{ color: '#ff6b6b', marginTop: '4px' }}>
+              No available tools found.
+            </div>
+          )}
+        </div>
+      </ConfigCard>
+    );
+  };
+
+  const renderLibrarySettings = () => {
+    if (isLoadingAgentDefaults || !agentDefaults) {
+      return (
+        <ConfigCard title={t('config.library_settings_title')} icon="[LIBR]">
+          <div className="empty-config">
+            <span>{t('status.loading')}</span>
+          </div>
+        </ConfigCard>
+      );
+    }
+
+    const currentLibExtractValue = agentDefaults.libraryExtractProviderId && agentDefaults.libraryExtractModelName
+      ? `${agentDefaults.libraryExtractProviderId}/${agentDefaults.libraryExtractModelName}`
+      : '';
+
+    return (
+      <ConfigCard title={t('config.library_settings_title')} icon="[LIBR]">
+        {/* Library Extract Model Selection */}
+        <SelectField
+          label="Library AI Extract Model"
+          value={currentLibExtractValue}
+          onChange={handleLibraryExtractModelChange}
+          options={enabledModels}
+          disabled={isLoadingModels || enabledModels.length === 0}
+        />
+        <div className="form-hint" style={{ color: 'var(--text-muted)', marginTop: '-10px', marginBottom: '10px', fontSize: '12px' }}>
+          Model used for AI metadata extraction from PDFs in Library. Falls back to Default Model if not set.
+        </div>
+
+        {/* Library Extract Language Selection */}
+        <SelectField
+          label="Library AI Extract Language"
+          value={agentDefaults.libraryExtractLanguage || 'English'}
+          onChange={handleLibraryExtractLanguageChange}
+          options={[
+            { value: 'English', label: 'English' },
+            { value: 'Chinese', label: '中文 (Chinese)' },
+            { value: 'Japanese', label: '日本語 (Japanese)' },
+            { value: 'Korean', label: '한국어 (Korean)' },
+            { value: 'German', label: 'Deutsch (German)' },
+            { value: 'French', label: 'Français (French)' },
+            { value: 'Spanish', label: 'Español (Spanish)' },
+            { value: 'Portuguese', label: 'Português (Portuguese)' },
+            { value: 'Russian', label: 'Русский (Russian)' },
+            { value: 'Italian', label: 'Italiano (Italian)' },
+          ]}
+        />
+        <div className="form-hint" style={{ color: 'var(--text-muted)', marginTop: '-10px', marginBottom: '10px', fontSize: '12px' }}>
+          Language for AI-extracted abstract and metadata. Author names are kept in their original form.
+        </div>
+      </ConfigCard>
+    );
+  };
+
+  const renderFeishuConfig = (channel) => {
+    const isEnabled = channel.enabled === true;
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        <InputField
+          label="App ID"
+          value={channel.appId || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, { appId: v })}
+          placeholder="cli_xxxxxxxxxxxxxxxx"
+        />
+        <PasswordField
+          label="App Secret"
+          value={channel.appSecret || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, { appSecret: v })}
+          placeholder="xxxxxxxxxxxxxxxx"
+        />
+        <InputField
+          label="Encrypt Key"
+          value={channel.encryptKey || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, { encryptKey: v })}
+          placeholder="(optional)"
+        />
+        <InputField
+          label="Verification Token"
+          value={channel.verificationToken || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, { verificationToken: v })}
+          placeholder="(optional)"
+        />
+        <div className="form-field">
+          <label className="form-label">{t('config.allow_from')}</label>
+          <textarea
+            key={`allow-${channel.channelName}`}
+            defaultValue={JSON.stringify(channel.allowFrom || [], null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateChannelConfig(channel.channelName, { allowFrom: parsed });
+              } catch (err) {
+                alert(t('config.json_invalid'));
+                e.target.value = JSON.stringify(channel.allowFrom || [], null, 2);
+              }
+            }}
+            className="pixel-input form-input json-textarea"
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const startQrCountdown = () => {
+    stopQrCountdown();
+    setQrCountdown(300);
+    qrCountdownRef.current = setInterval(() => {
+      setQrCountdown(prev => {
+        if (prev <= 1) {
+          stopQrCountdown();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const stopQrCountdown = () => {
+    if (qrCountdownRef.current) {
+      clearInterval(qrCountdownRef.current);
+      qrCountdownRef.current = null;
+    }
+  };
+
+  const formatCountdown = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const reconnectWechat = async (channelName) => {
+    if (!window.confirm(t('config.reconnect_wechat_confirm'))) {
+      return;
+    }
+    
+    setExpandedChannels(prev => ({ ...prev, [channelName]: true }));
+    
+    try {
+      const response = await sendWSMessage('wechat_clear_token', { channelName }, 10000);
+      if (response.data?.success) {
+        setWechatQrCodeUrl(null);
+        setWechatQrToken(null);
+        setWechatStatus(null);
+        setQrCountdown(300);
+        stopQrCountdown();
+        await loadChannelConfigs();
+      }
+    } catch (err) {
+      console.error('重新连接微信出错:', err);
+      alert(t('config.reconnect_failed') + err.message);
+    }
+  };
+
+  const deleteChannel = async (channelName) => {
+    if (!window.confirm(`${t('config.delete_channel_confirm')}${channelName}"?`)) return;
+    try {
+      await sendWSMessage('channel_delete', { channelName }, 5000);
+      await loadChannelConfigs();
+    } catch (err) {
+      console.error('删除渠道出错:', err);
+      alert(t('config.delete_failed') + err.message);
+    }
+  };
+
+  const getWechatQrCode = async (channelName) => {
+    try {
+      const response = await sendWSMessage('wechat_get_qrcode', { channelName }, 30000);
+      if (response.data?.success) {
+        setWechatQrCodeUrl(response.data.qrcode_img_content);
+        setWechatQrToken(response.data.qrcode_token);
+        setWechatStatus('waiting');
+        startQrCountdown();
+        startWechatPolling(response.data.qrcode_token, channelName);
+      } else {
+        alert(t('config.get_qrcode_failed') + (response.data?.error || t('config.unknown_error')));
+      }
+    } catch (err) {
+      console.error('获取二维码出错:', err);
+      alert(t('config.get_qrcode_failed') + err.message);
+    }
+  };
+
+  const startWechatPolling = (qrcodeToken, channelName) => {
+    setIsWechatPolling(true);
+    wechatPollingActiveRef.current = true;
+// Removed debug log
+    
+    const poll = async () => {
+      if (!wechatPollingActiveRef.current) {
+// Removed debug log
+        return;
+      }
+      
+      try {
+// Removed debug log
+        const response = await sendWSMessage('wechat_check_status', { 
+          qrcode_token: qrcodeToken, 
+          channelName 
+        }, 10000);
+        
+// Removed debug log
+        
+        if (response.data?.success) {
+          const status = response.data.status;
+          setWechatStatus(status);
+// Removed debug log
+          
+          if (status === 'confirmed') {
+            setIsWechatPolling(false);
+            wechatPollingActiveRef.current = false;
+            stopQrCountdown();
+            setSuccessUserInfo({
+              botId: response.data.ilink_bot_id,
+              userId: response.data.ilink_user_id,
+              channelName: channelName
+            });
+            setShowSuccessModal(true);
+            return;
+          } else if (status === 'expired' || status === 'cancelled') {
+            setIsWechatPolling(false);
+            wechatPollingActiveRef.current = false;
+            stopQrCountdown();
+            setWechatQrCodeUrl(null);
+            setWechatQrToken(null);
+            return;
+          }
+        }
+        
+        if (wechatPollingActiveRef.current) {
+          wechatPollingRef.current = setTimeout(poll, 1000);
+        }
+      } catch (err) {
+        console.error('微信轮询出错:', err);
+        if (wechatPollingActiveRef.current) {
+          wechatPollingRef.current = setTimeout(poll, 2000);
+        }
+      }
+    };
+    
+    wechatPollingRef.current = setTimeout(poll, 1000);
+  };
+
+  const stopWechatPolling = () => {
+    setIsWechatPolling(false);
+    wechatPollingActiveRef.current = false;
+    if (wechatPollingRef.current) {
+      clearTimeout(wechatPollingRef.current);
+      wechatPollingRef.current = null;
+    }
+    stopQrCountdown();
+  };
+
+  const handleConfirmSuccess = async () => {
+    setShowSuccessModal(false);
+    setWechatQrCodeUrl(null);
+    setWechatQrToken(null);
+    setSuccessUserInfo(null);
+    await loadChannelConfigs();
+  };
+
+  useEffect(() => {
+    return () => {
+      stopWechatPolling();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (qrCountdown <= 0 && wechatStatus === 'waiting') {
+      setWechatStatus('expired');
+      stopWechatPolling();
+    }
+  }, [qrCountdown, wechatStatus]);
+
+  const renderWechatConfig = (channel) => {
+    const isEnabled = channel.enabled === true;
+    const isConnected = channel.running === true;
+    
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        
+        {isConnected ? (
+          <div className="form-field">
+            <div style={{
+              padding: '12px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              borderRadius: 'var(--r-md)',
+              color: '#22c55e',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '14px'
+            }}>
+              <Check size={16} />
+              <span>{t('config.wechat_connected')}</span>
+            </div>
+            <button
+              className="pixel-button"
+              onClick={() => reconnectWechat(channel.channelName)}
+              style={{
+                marginTop: '10px',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <RefreshCw size={14} />
+              {t('mcp.reconnect')}
+            </button>
+          </div>
+        ) : (
+          <>
+            {!wechatQrCodeUrl ? (
+              <div className="form-field">
+                <button
+                  className="pixel-button"
+                  onClick={() => getWechatQrCode(channel.channelName)}
+                  style={{ 
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <QrCode size={16} />
+                  {t('config.get_qrcode')}
+                </button>
+              </div>
+            ) : (
+              <div className="form-field">
+                <div style={{ 
+                  textAlign: 'center',
+                  padding: '16px',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--r-lg)'
+                }}>
+                  <img 
+                    src={wechatQrCodeUrl} 
+                    alt="WeChat QR Code" 
+                    style={{ 
+                      width: '200px', 
+                      height: '200px',
+                      imageRendering: 'pixelated',
+                      borderRadius: 'var(--r-md)'
+                    }}
+                  />
+                  
+                  <div style={{
+                    marginTop: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    color: qrCountdown <= 60 ? 'var(--danger)' : 'var(--text-2)',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    fontFamily: 'var(--font-mono)'
+                  }}>
+                    <Clock size={16} />
+                    <span>{formatCountdown(qrCountdown)}</span>
+                  </div>
+                  
+                  <p style={{ 
+                    marginTop: '10px', 
+                    color: 'var(--text-2)',
+                    fontSize: '13px',
+                    fontFamily: 'var(--font-sans)'
+                  }}>
+                    {wechatStatus === 'waiting' && t('config.scan_qrcode')}
+                    {wechatStatus === 'scaned' && (
+                      <span style={{ 
+                        color: 'var(--warn)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '6px' 
+                      }}>
+                        <CheckCircle size={14} />
+                        {t('config.scanned_confirm')}
+                      </span>
+                    )}
+                    {wechatStatus === 'expired' && (
+                      <span style={{ 
+                        color: 'var(--danger)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '6px' 
+                      }}>
+                        <AlertCircle size={14} />
+                        {t('config.qrcode_expired')}
+                      </span>
+                    )}
+                    {wechatStatus === 'cancelled' && t('config.cancelled_rescan')}
+                  </p>
+                  {(wechatStatus === 'expired' || wechatStatus === 'cancelled') && (
+                    <button
+                      className="pixel-button"
+                      onClick={() => getWechatQrCode(channel.channelName)}
+                      style={{ 
+                        marginTop: '10px',
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <RefreshCw size={14} />
+                      {t('config.get_qrcode_again')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const renderTelegramConfig = (channel) => {
+    const config = channel.configJson || {};
+    const isEnabled = channel.enabled === true;
+
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        <PasswordField
+          label="Bot Token"
+          value={config.token || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, token: v }
+          })}
+          placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+        />
+        <div className="form-field">
+          <label className="form-label">{t('config.allow_from')}</label>
+          <textarea
+            key={`allow-${channel.channelName}`}
+            defaultValue={JSON.stringify(config.allowFrom || [], null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateChannelConfig(channel.channelName, {
+                  configJson: { ...config, allowFrom: parsed }
+                });
+              } catch (err) {
+                alert(t('config.json_invalid'));
+                e.target.value = JSON.stringify(config.allowFrom || [], null, 2);
+              }
+            }}
+            className="pixel-input form-input json-textarea"
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const renderDingTalkConfig = (channel) => {
+    const config = channel.configJson || {};
+    const isEnabled = channel.enabled === true;
+
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        <InputField
+          label="Client ID"
+          value={config.clientId || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, clientId: v }
+          })}
+          placeholder="dingxxxxxxxxxxxxxxxx"
+        />
+        <PasswordField
+          label="Client Secret"
+          value={config.clientSecret || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, clientSecret: v }
+          })}
+          placeholder="xxxxxxxxxxxxxxxx"
+        />
+        <div className="form-field">
+          <label className="form-label">{t('config.allow_from')}</label>
+          <textarea
+            key={`allow-${channel.channelName}`}
+            defaultValue={JSON.stringify(config.allowFrom || [], null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateChannelConfig(channel.channelName, {
+                  configJson: { ...config, allowFrom: parsed }
+                });
+              } catch (err) {
+                alert(t('config.json_invalid'));
+                e.target.value = JSON.stringify(config.allowFrom || [], null, 2);
+              }
+            }}
+            className="pixel-input form-input json-textarea"
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const renderSlackConfig = (channel) => {
+    const config = channel.configJson || {};
+    const isEnabled = channel.enabled === true;
+
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        <PasswordField
+          label="Bot Token"
+          value={config.botToken || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, botToken: v }
+          })}
+          placeholder="xoxb-..."
+        />
+        <PasswordField
+          label="App Token"
+          value={config.appToken || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, appToken: v }
+          })}
+          placeholder="xapp-... (optional)"
+        />
+        <div className="form-field">
+          <label className="form-label">{t('config.allow_from')}</label>
+          <textarea
+            key={`allow-${channel.channelName}`}
+            defaultValue={JSON.stringify(config.allowFrom || [], null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateChannelConfig(channel.channelName, {
+                  configJson: { ...config, allowFrom: parsed }
+                });
+              } catch (err) {
+                alert(t('config.json_invalid'));
+                e.target.value = JSON.stringify(config.allowFrom || [], null, 2);
+              }
+            }}
+            className="pixel-input form-input json-textarea"
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const renderDiscordConfig = (channel) => {
+    const config = channel.configJson || {};
+    const isEnabled = channel.enabled === true;
+
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        <PasswordField
+          label="Bot Token"
+          value={config.token || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, token: v }
+          })}
+          placeholder="xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxx"
+        />
+        <div className="form-field">
+          <label className="form-label">{t('config.allow_from')}</label>
+          <textarea
+            key={`allow-${channel.channelName}`}
+            defaultValue={JSON.stringify(config.allowFrom || [], null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateChannelConfig(channel.channelName, {
+                  configJson: { ...config, allowFrom: parsed }
+                });
+              } catch (err) {
+                alert(t('config.json_invalid'));
+                e.target.value = JSON.stringify(config.allowFrom || [], null, 2);
+              }
+            }}
+            className="pixel-input form-input json-textarea"
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const renderEmailConfig = (channel) => {
+    const config = channel.configJson || {};
+    const isEnabled = channel.enabled === true;
+
+    return (
+      <>
+        <SwitchField
+          label="Enabled"
+          checked={isEnabled}
+          onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+        />
+        <InputField
+          label="IMAP Host"
+          value={config.imapHost || 'imap.gmail.com'}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, imapHost: v }
+          })}
+          placeholder="imap.gmail.com"
+        />
+        <InputField
+          label="IMAP Port"
+          type="number"
+          value={config.imapPort || 993}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, imapPort: parseInt(v) || 993 }
+          })}
+          placeholder="993"
+        />
+        <InputField
+          label="SMTP Host"
+          value={config.smtpHost || 'smtp.gmail.com'}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, smtpHost: v }
+          })}
+          placeholder="smtp.gmail.com"
+        />
+        <InputField
+          label="SMTP Port"
+          type="number"
+          value={config.smtpPort || 587}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, smtpPort: parseInt(v) || 587 }
+          })}
+          placeholder="587"
+        />
+        <InputField
+          label="Email Address"
+          value={config.address || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, address: v }
+          })}
+          placeholder="your-email@gmail.com"
+        />
+        <PasswordField
+          label="Password / App Password"
+          value={config.password || ''}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, password: v }
+          })}
+          placeholder="xxxxxxxx"
+        />
+        <InputField
+          label="Poll Interval (minutes)"
+          type="number"
+          value={config.pollInterval || 15}
+          onChange={(v) => updateChannelConfig(channel.channelName, {
+            configJson: { ...config, pollInterval: parseInt(v) || 15 }
+          })}
+          placeholder="15"
+        />
+        <div className="form-field">
+          <label className="form-label">{t('config.allow_from')}</label>
+          <textarea
+            key={`allow-${channel.channelName}`}
+            defaultValue={JSON.stringify(config.allowFrom || [], null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateChannelConfig(channel.channelName, {
+                  configJson: { ...config, allowFrom: parsed }
+                });
+              } catch (err) {
+                alert(t('config.json_invalid'));
+                e.target.value = JSON.stringify(config.allowFrom || [], null, 2);
+              }
+            }}
+            className="pixel-input form-input json-textarea"
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+        <div className="form-field">
+          <button
+            className="pixel-button"
+            onClick={() => deleteChannel(channel.channelName)}
+            style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            {t('config.delete_channel')}
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const renderGenericChannelConfig = (channel) => (
+    <>
+      <SwitchField
+        label="Enabled"
+        checked={channel.enabled === true}
+        onChange={(v) => updateChannelConfig(channel.channelName, { enabled: v })}
+      />
+      <div className="form-field">
+        <label className="form-label">{t('config.config_json')}</label>
+        <textarea
+          key={`cfg-${channel.channelName}`}
+          defaultValue={JSON.stringify(channel.configJson || {}, null, 2)}
+          onBlur={(e) => {
+            try {
+              const parsed = JSON.parse(e.target.value);
+              updateChannelConfig(channel.channelName, { configJson: parsed });
+            } catch (err) {
+              alert(t('config.json_invalid'));
+              e.target.value = JSON.stringify(channel.configJson || {}, null, 2);
+            }
+          }}
+          className="pixel-input form-input json-textarea"
+          rows={6}
+          spellCheck={false}
+        />
+      </div>
+      <div className="form-field">
+        <button
+          className="pixel-button"
+          onClick={() => deleteChannel(channel.channelName)}
+          style={{ width: '100%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+        >
+          {t('config.delete_channel')}
+        </button>
+      </div>
+    </>
+  );
+
+  const renderChannels = () => {
+    if (isLoadingChannels) {
+      return (
+        <ConfigCard title="CHANNELS" icon="[CHNL]">
+          <div className="empty-config">
+            <span>{t('status.loading')}</span>
+          </div>
+        </ConfigCard>
+      );
+    }
+
+    const channelIcons = {
+      feishu: <Send size={16} />,
+      wechat: <MessageCircle size={16} />,
+      telegram: <Send size={16} />,
+      dingtalk: <Bell size={16} />,
+      slack: <Hash size={16} />,
+      discord: <Gamepad2 size={16} />,
+      email: <Mail size={16} />,
+    };
+
+    return (
+      <ConfigCard
+        title="CHANNELS"
+        icon="[CHNL]"
+      >
+        {channelConfigs.length === 0 ? (
+          <div className="empty-config">
+            <span>{t('config.no_channels')}</span>
+          </div>
+        ) : (
+          <div className="dynamic-items-list">
+            {channelConfigs.map((channel) => (
+              <DynamicItemCard
+                key={channel.channelName}
+                title={channel.channelName}
+                itemKey={channel.channelName}
+                defaultExpanded={expandedChannels[channel.channelName] || false}
+                onDelete={deleteChannel}
+                icon={channelIcons[channel.channelName] || <Radio size={16} />}
+              >
+                {channel.channelName === 'feishu'
+                  ? renderFeishuConfig(channel)
+                  : channel.channelName === 'wechat'
+                    ? renderWechatConfig(channel)
+                    : channel.channelName === 'telegram'
+                      ? renderTelegramConfig(channel)
+                      : channel.channelName === 'dingtalk'
+                        ? renderDingTalkConfig(channel)
+                        : channel.channelName === 'slack'
+                            ? renderSlackConfig(channel)
+                            : channel.channelName === 'discord'
+                              ? renderDiscordConfig(channel)
+                              : channel.channelName === 'email'
+                                ? renderEmailConfig(channel)
+                                : renderGenericChannelConfig(channel)
+                }
+              </DynamicItemCard>
+            ))}
+          </div>
+        )}
+        
+        {showSuccessModal && (
+          <div className="modal-overlay" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(4px)'
+          }}>
+            <div className="modal-content" style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--r-xl)',
+              padding: '32px',
+              maxWidth: '420px',
+              width: '90%',
+              textAlign: 'center',
+              boxShadow: 'var(--shadow-3)',
+              animation: 'modalFadeIn 0.3s ease-out'
+            }}>
+              <div style={{
+                width: '72px',
+                height: '72px',
+                margin: '0 auto 24px',
+                borderRadius: '50%',
+                background: 'rgba(34, 197, 94, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                animation: 'successPulse 1.5s ease-in-out infinite'
+              }}>
+                <CheckCircle size={40} style={{ color: '#22c55e' }} />
+              </div>
+              
+              <h3 style={{ 
+                color: 'var(--text)', 
+                marginBottom: '16px', 
+                fontSize: '20px',
+                fontWeight: '600',
+                fontFamily: 'var(--font-sans)'
+              }}>
+                {t('config.wechat_success_title')}
+              </h3>
+              
+              {successUserInfo && (
+                <div style={{
+                  background: 'var(--surface-2)',
+                  padding: '16px',
+                  borderRadius: 'var(--r-md)',
+                  marginBottom: '24px',
+                  textAlign: 'left',
+                  border: '1px solid var(--border)'
+                }}>
+                  <p style={{ 
+                    color: 'var(--text-2)', 
+                    fontSize: '13px', 
+                    marginBottom: '8px',
+                    fontFamily: 'var(--font-mono)'
+                  }}>
+                    <strong style={{ color: 'var(--text-3)', fontFamily: 'var(--font-sans)' }}>Bot ID:</strong> {successUserInfo.botId}
+                  </p>
+                  <p style={{ 
+                    color: 'var(--text-2)', 
+                    fontSize: '13px',
+                    fontFamily: 'var(--font-mono)'
+                  }}>
+                    <strong style={{ color: 'var(--text-3)', fontFamily: 'var(--font-sans)' }}>User ID:</strong> {successUserInfo.userId}
+                  </p>
+                </div>
+              )}
+              
+              <p style={{ 
+                color: 'var(--text-3)', 
+                fontSize: '14px', 
+                marginBottom: '24px',
+                fontFamily: 'var(--font-sans)'
+              }}>
+                {t('config.wechat_success_desc')}
+              </p>
+              
+              <button
+                className="pixel-button"
+                onClick={handleConfirmSuccess}
+                style={{
+                  width: '100%',
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  margin: 0
+                }}
+              >
+                {t('config.confirm_btn')}
+              </button>
+            </div>
+          </div>
+        )}
+      </ConfigCard>
+    );
+  };
+
+  const renderTools = () => {
+    if (isLoadingTools) {
+      return (
+        <ConfigCard title="TOOLS" icon="[TOOL]">
+          <div className="empty-config">
+            <span>{t('status.loading')}</span>
+          </div>
+        </ConfigCard>
+      );
+    }
+
+    const execTool = toolConfigs.find(t => t.toolName === 'exec');
+    const webSearchTool = toolConfigs.find(t => t.toolName === 'web_search');
+
+    return (
+      <ConfigCard title="TOOLS" icon="[TOOL]">
+        {/* Exec Tool Config */}
+        {execTool && (
+          <>
+            <h4 style={{ marginTop: '10px', marginBottom: '10px', color: '#00f0ff' }}>{t('config.code_exec_tool')}</h4>
+            <SwitchField
+              label="Enabled"
+              checked={execTool.enabled !== false}
+              onChange={(v) => updateToolConfig('exec', { enabled: v })}
+            />
+            <InputField
+              label="Timeout (seconds)"
+              type="number"
+              value={execTool.timeout || 60}
+              onChange={(v) => updateToolConfig('exec', { timeout: parseInt(v) || 60 })}
+              placeholder="60"
+            />
+            <SwitchField
+              label="Restrict to Workspace"
+              checked={execTool.restrictToWorkspace !== false}
+              onChange={(v) => updateToolConfig('exec', { restrictToWorkspace: v })}
+            />
+          </>
+        )}
+
+        {/* Web Search Tool Config */}
+        {webSearchTool && (
+          <>
+            <h4 style={{ marginTop: '20px', marginBottom: '10px', color: '#00f0ff' }}>{t('config.web_search_tool')}</h4>
+            <SwitchField
+              label="Enabled"
+              checked={webSearchTool.enabled !== false}
+              onChange={(v) => updateToolConfig('web_search', { enabled: v })}
+            />
+            <PasswordField
+              label="Search API Key"
+              value={webSearchTool.searchApiKey || ''}
+              onChange={(v) => updateToolConfig('web_search', { searchApiKey: v })}
+              placeholder="API key for web search"
+            />
+            <InputField
+              label="Max Results"
+              type="number"
+              value={webSearchTool.searchMaxResults || 5}
+              onChange={(v) => updateToolConfig('web_search', { searchMaxResults: parseInt(v) || 5 })}
+              placeholder="5"
+            />
+          </>
+        )}
+      </ConfigCard>
+    );
+  };
+
+  const renderContent = () => {
+    switch (configTab) {
+      case 'providers': return <ProviderSetting sendWSMessage={sendWSMessage} />;
+      case 'agents': return renderAgentDefaults();
+      case 'library': return renderLibrarySettings();
+      case 'channels': return renderChannels();
+      case 'multimodal': return <MultimodalPanel sendWSMessage={sendWSMessage} />;
+      default: return <ProviderSetting sendWSMessage={sendWSMessage} />;
+    }
+  };
+
+  return (
+    <div className="config-form-container">
+      <div className="window-header">
+        <WindowDots />
+        <span className="window-title">{t('config.title')}</span>
+        <div className="window-actions">
+          <button className="pixel-button small save-btn" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? t('status.saving') : <Save size={14} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="config-with-tabs">
+        <div className="config-tabs">
+          {CONFIG_TABS.map((tab) => (
+            <button key={tab.key} className={`config-tab ${configTab === tab.key ? '活跃' : ''}`} onClick={() => handleTabSwitch(tab.key)} title={t(tab.descKey)}>
+              <tab.Icon size={14} />
+              <span className="tab-label">{t(tab.labelKey)}</span>
+              <span className="tab-desc">{t(tab.descKey)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="config-tab-content">
+          {renderContent()}
+        </div>
+      </div>
+
+      <AddItemDialog
+        isOpen={addDialog.isOpen}
+        onClose={() => setAddDialog({ ...addDialog, isOpen: false })}
+        onConfirm={handleAddConfirm}
+        title={addDialog.title}
+        placeholder={addDialog.placeholder}
+      />
+    </div>
+  );
+}
+
+export default ConfigPanel;

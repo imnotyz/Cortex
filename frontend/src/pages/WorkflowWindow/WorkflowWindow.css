@@ -1,0 +1,13 @@
+/**
+ * WorkflowWindow 窗口级样式
+ * Hub / Editor 两层架构共用
+ */
+
+.workflow-window {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafc;
+}
