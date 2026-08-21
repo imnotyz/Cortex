@@ -23,7 +23,7 @@
   </p>
 </div>
 
-***
+
 
 <div align="center">
   <h3>🌟 Like an cortex, handle multiple things at once 🌟</h3>
