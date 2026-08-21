@@ -1,18 +1,18 @@
 <div align="center">
-  <img src="./backend/templates/workspace/avatars/cortex.png" alt="Cortex Logo" width="200" />
+  <img src="https://raw.githubusercontent.com/imnotyz/Cortex/main/frontend/src/assets/cortex-mascot.png" alt="Cortex Mascot" width="280" />
 
   <h1>
-    <img src="https://img.shields.io/badge/🧠Cortex-FF6B35?style=for-the-badge&labelColor=1a1a2e" alt="Cortex" />
+    <img src="https://img.shields.io/badge/🧠Cortex-4FACFE?style=for-the-badge&labelColor=0a0f1a" alt="Cortex" />
   </h1>
 
   <p>
-    <strong style="font-size: 1.2em; color: #FF6B35;">Desktop AI Agent Framework · Multi-agent Collaboration</strong>
+    <strong style="font-size: 1.2em; color: #4FACFE;">AI Agent Desktop App · Multi-Model Collaboration · Workflow Orchestration</strong>
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/version-1.1.0-FF6B35?style=flat-square&logo=github" alt="Version" />
-    <img src="https://img.shields.io/badge/license-MIT-4ECDC4?style=flat-square" alt="License" />
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-45B7D1?style=flat-square" alt="Platform" />
+    <img src="https://img.shields.io/badge/version-1.1.0-4FACFE?style=flat-square&logo=github" alt="Version" />
+    <img src="https://img.shields.io/badge/license-MIT-00d4ff?style=flat-square" alt="License" />
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-4FACFE?style=flat-square" alt="Platform" />
   </p>
 
   <p>
@@ -28,7 +28,6 @@
 <div align="center">
   <h3>🌟 Like an cortex, handle multiple things at once 🌟</h3>
 </div>
-
 
 ***
 
@@ -766,7 +765,7 @@ Issues and Pull Requests welcome:
 
 ## 📋 Changelog
 
-### 2026-06
+### 2026-08
 
 | Date       | Version | Changes                                                    |
 | :--------- | :------ | :--------------------------------------------------------- |
@@ -781,7 +780,7 @@ Issues and Pull Requests welcome:
 | 2026-06-07 | v1.1.0  | 💰 New: Budget alerts — monthly spending cap with progress bar |
 | 2026-06-07 | v1.1.0  | 🔧 Fix: Corrected node type count (24→16) and version badges |
 
-### 2026-08
+### 2026-07
 
 | Date       | Version | Changes                                                    |
 | :--------- | :------ | :--------------------------------------------------------- |
@@ -827,7 +826,7 @@ Issues and Pull Requests welcome:
 
 ### 🧠 Cortex makes your work more efficient 🧠
 
-<img src="./backend/templates/workspace/avatars/cortex.png" width="80" style="border-radius: 10px;" />
+<img src="https://raw.githubusercontent.com/imnotyz/Cortex/main/frontend/src/assets/cortex-logo.png" width="80" style="border-radius: 10px;" />
 
 <sub>Built with ❤️ and 🧠</sub>
 
