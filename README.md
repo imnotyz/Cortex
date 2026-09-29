@@ -3,7 +3,7 @@
 
   # Cortex
 
-  **A local-first desktop workspace for building, running, and observing AI agents.**
+  **A local-first visual AI agent workspace for early-stage product ideation**
 
   [简体中文](./README-CN.md) · English
 
@@ -22,72 +22,192 @@
 
 ## What is Cortex?
 
-Cortex is an open-source AI Agent desktop application that brings conversations, tools, memory, knowledge, workflows, subagents, scheduled tasks, cost tracking, and execution traces into one place.
+Early-stage product and concept design rarely follows a straight line. Teams move between problem framing, research, divergent exploration, comparison, refinement, and convergence.
 
-Unlike a chat-only client, Cortex is designed around **tasks that actually run**. Agents can use local tools, access project-scoped knowledge, delegate work, execute visual workflows, recover from failures, and preserve context across sessions. User data and runtime state are stored locally by default.
+A linear AI conversation preserves only one continuous context. Once an idea branches into multiple directions, it becomes difficult to return to an earlier decision, compare alternatives, recombine useful parts, or understand how a result was produced.
 
-> Cortex is under active development. Interfaces and data schemas may change before a stable release.
+Cortex combines an **AI agent runtime** with a **visual workflow canvas**, turning an opaque chat history into a process that can be branched, inspected, replayed, and refined.
+
+Agents can use local files, shell commands, browsers, knowledge bases, and external tools. Users can inspect node states, tool calls, variables, execution traces, and token costs while remaining in control of important decisions.
+
+> Cortex is under active development. Interfaces, capabilities, and data schemas may change before a stable release.
+
+## Why a visual agent workspace?
+
+Linear chat works well for isolated questions, but creative work is nonlinear. Cortex is designed around six principles:
+
+- **Explore multiple directions** without overwriting earlier ideas.
+- **Compare alternatives** side by side and recombine useful parts.
+- **Make execution visible**, including tool calls and intermediate states.
+- **Keep humans in the loop** at important decision points.
+- **Preserve provenance** through versions, traces, and contextual records.
+- **Stay local-first**, with workspace data and runtime state stored locally by default.
+
+## A typical workflow
+
+```text
+Problem or Design Brief
+          │
+          ▼
+     Agent decomposes task
+          │
+          ▼
+Research ── Divergence ── Constraint filtering
+   │             │                 │
+   └──── Comparison and recombination ────┘
+                         │
+                         ▼
+                 Human decision
+                         │
+                         ▼
+                Result with full trace
+```
+
+Cortex is not intended to replace human creative judgment. It helps users manage exploration while agents handle research, repetitive execution, and expansion of alternatives.
 
 ## Highlights
 
 | Capability | What it provides |
 | --- | --- |
-| **Agent workspace** | Project-isolated identity, configuration, memory, tools, files, and chat history |
-| **Tool execution** | Filesystem, shell, browser, web, image, messaging, scheduling, and MCP tools |
-| **Visual workflows** | Drag-and-drop orchestration with branches, loops, parallel execution, forms, agents, and sub-workflows |
-| **Knowledge workspace** | Documents, Markdown notes, scoped chat, PDF chat, knowledge graph, and AI distillation |
-| **Subagents** | Specialized agents with independent prompts, tools, workspaces, and memory |
-| **Reliability controls** | Model routing, retries and fallback, context compression, verification loops, and action hooks |
-| **Observability** | Streaming execution, tool-call visibility, run traces, token usage, cost analysis, and budget alerts |
-| **Extensibility** | Markdown Skills, plugins, workers, MCP servers, and built-in extensions |
+| **Visual workflows** | Compose agents, tools, conditions, loops, parallel tasks, and human input on a canvas |
+| **16 workflow node types** | Flow control, LLM calls, extraction, code, files, HTTP, variables, forms, agents, and sub-workflows |
+| **Agent execution** | Tool use, streaming output, iterative execution, subagents, and long-running tasks |
+| **Versions and traces** | Preserve workflow versions, node states, variable changes, and complete execution traces |
+| **Local tools** | Filesystem, shell, web fetch, browser automation, image, and messaging tools |
+| **Knowledge workspace** | Documents, Markdown notes, scoped chat, PDF chat, knowledge graphs, and AI distillation |
+| **Reliability controls** | Model routing, retries, context compression, verification loops, and safety hooks |
+| **Cost governance** | Token usage, model costs, historical trends, and budget alerts |
+| **Extensibility** | Markdown Skills, plugins, workers, and MCP servers |
 | **Multi-channel access** | Desktop, WeChat, Feishu/Lark, DingTalk, Slack, Discord, Telegram, email, and webhooks |
 
-## Core workflows
+## Visual workflows
 
-### Run an agent
+The ReactFlow-based editor provides nodes for:
 
-Configure a provider, model, tools, and iteration limits in the UI. Cortex streams responses and tool calls, isolates project data in workspaces, and records token usage, cost, observations, and long-term memory.
+| Category | Capabilities |
+| --- | --- |
+| **Flow** | Start, answer, and end |
+| **AI** | LLM calls, question classification, and content extraction |
+| **Tools** | HTTP, code execution, file reading, JSON, and text processing |
+| **Logic** | Conditions, variables, loops, and parallel execution |
+| **Interaction** | User choices and form input |
+| **Agents** | Agent nodes and sub-workflows |
 
-### Build a visual workflow
+Workflow features include:
 
-The ReactFlow-based editor includes 16 registered node types for:
+- Drag-and-drop editing and auto-save
+- Isolated node testing
+- Conditional branches, loops, and parallel execution
+- Workflow version management
+- Node-state and variable inspection
+- Complete execution traces
+- Reusable templates and sub-workflows
 
-- Flow control
-- LLM calls and content extraction
-- HTTP, code, file, JSON, and text tools
-- Conditions, variables, loops, and parallel execution
-- User selection and form input
-- Agent nodes and sub-workflows
+## Agent runtime
 
-Workflows support node testing, version management, auto-save, execution traces, and variable inspection.
+Cortex uses a ReAct-style tool execution loop:
 
-### Work with knowledge
+```text
+User goal
+   ↓
+Agent reasoning
+   ↓
+Tool selection and execution
+   ↓
+Observation
+   ↓
+Verification or another iteration
+   ↓
+Result with execution records
+```
 
-- Upload and preview PDF, DOCX, XLSX, PPTX, images, and Markdown.
-- Distill documents into reusable knowledge.
-- Organize Markdown notes in vaults and import Obsidian vaults.
-- Chat with a selected note path, vault, or PDF.
-- Explore relationships through the knowledge graph and PDF mind maps.
+Each project can have isolated agent configuration, tools, files, memory, and conversation history, reducing context pollution between unrelated tasks.
 
-### Extend Cortex
+### Subagents
 
-- Add a Markdown-based `SKILL.md` to teach an agent a reusable method.
-- Connect external tools through MCP over stdio or HTTP SSE.
-- Install Skill, Plugin, or Worker extensions.
-- Bind tools and extensions to individual subagents.
+Complex tasks can be delegated to specialized agents with independent prompts, tools, workspaces, and memory:
+
+- Create and configure subagents visually
+- Run tasks synchronously or asynchronously
+- Isolate experimental work from the main agent context
+- Aggregate results from multiple subtasks
+- Bind dedicated tools and Skills to individual subagents
 
 ## Reliability and safety
 
-Cortex includes runtime controls for long-running and tool-using agents:
+The quality of a tool-using agent depends on more than model selection. Task execution, error recovery, verification, and observability are equally important.
 
-- Task-aware model routing with cost budgets and circuit breaking
-- Recovery chain: retry → fallback model → context compression → user notification
-- Verification loops with feedback injection
-- Action hooks for dangerous commands, file safety, and token budgets
-- Persistent scheduled tasks and long-running task state
-- Execution logs for agents, subagents, workflows, and knowledge distillation
+Cortex includes:
 
-These controls reduce avoidable failures, but do not make arbitrary tool execution risk-free. Review permissions before using Cortex with sensitive data or systems.
+- **Model routing** based on task type, cost budget, and provider availability
+- **Recovery chain**: retry → fallback model → context compression → user notification
+- **Context compression** for noisy tool output and long-running tasks
+- **Verification loops** for empty, placeholder, or unverified results
+- **Iteration limits** to reduce infinite loops and unnecessary resource usage
+- **Safety hooks** for dangerous commands, file access, and token budgets
+- **Execution observability** across tool calls, node states, failures, and costs
+
+These controls reduce avoidable failures, but they do not make arbitrary tool execution risk-free. Review permissions before using Cortex with sensitive files or systems.
+
+## Evaluation and iteration
+
+Cortex separates agent evaluation into three layers:
+
+1. **Capability evaluation** — intent understanding, node selection, argument generation, and tool use.
+2. **Process evaluation** — task progression, failure recovery, and loop prevention.
+3. **End-to-end evaluation** — final constraint satisfaction and required human intervention.
+
+A complete evaluation can combine:
+
+- Programmatic and schema-based checks
+- Cross-scored LLM judges
+- Human sample review
+- Comparison with a chat-based agent baseline
+- Bad-case classification and regression testing
+- Joint analysis of task quality and token cost
+
+The `benchmarks/` directory contains performance and evaluation scripts. Cortex does not claim evaluation improvements without reproducible runs and records.
+
+## Knowledge and memory
+
+The local knowledge workspace supports:
+
+- PDF, DOCX, XLSX, PPTX, image, and Markdown upload and preview
+- AI-assisted document distillation
+- Markdown vaults and Obsidian imports
+- Scoped chat over a file, path, vault, or PDF
+- Knowledge graphs and PDF mind maps
+- Persistent observations and long-term memory
+
+## Skills, plugins, and MCP
+
+### Markdown Skills
+
+A `SKILL.md` file can teach an agent a reusable method:
+
+```markdown
+---
+name: concept-review
+description: Review an early-stage product concept
+---
+
+When reviewing a concept:
+
+1. Clarify the target user and context.
+2. Identify the unresolved user problem.
+3. Generate at least three alternative directions.
+4. Compare value, feasibility, and risk.
+5. Preserve assumptions and open questions.
+```
+
+### MCP
+
+Cortex can connect to MCP servers over stdio or HTTP SSE:
+
+- Discover external tools automatically
+- Inspect connection status
+- Enable or disable individual tools
+- Bind tools to selected agents or subagents
 
 ## Quick start
 
@@ -110,7 +230,7 @@ pip install -r backend/requirements.txt
 npm run dev
 ```
 
-`npm run dev` starts the Vite frontend and Electron application. Electron manages the local Python backend lifecycle.
+`npm run dev` starts the Vite frontend and Electron desktop application. Electron manages the local Python backend lifecycle.
 
 After launch, configure a provider from **Settings → Model Providers**.
 
@@ -140,22 +260,22 @@ See [README_BUILD.md](./README_BUILD.md) for packaging details.
                                 │
         ┌───────────────────────┼────────────────────────┐
         │                       │                        │
-  Agent runtime           Workflow engine        Knowledge services
-  tools / memory          nodes / traces          docs / notes / graph
+  Agent Runtime          Workflow Engine        Knowledge Services
+  Tools / Memory         Nodes / Traces          Docs / Notes / Graph
         │                       │                        │
-        └──────────── SQLite + local workspace ──────────┘
+        └──────────── SQLite + Local Workspace ──────────┘
                                 │
-          Providers · MCP servers · external channels
+          Model Providers · MCP Servers · Channels
 ```
 
-### Technology stack
+## Technology stack
 
 | Layer | Technologies |
 | --- | --- |
 | Desktop | Electron 28, electron-builder |
 | Frontend | React 18, Vite 5, Ant Design, ReactFlow, Monaco Editor, ECharts, PixiJS |
 | Backend | Python 3.10+, FastAPI, WebSocket, SQLAlchemy, SQLite |
-| Agent runtime | Tool loop, subagents, memory, compression, routing, recovery, verification |
+| Agent runtime | Tool loop, subagents, memory, compression, routing, recovery, and verification |
 | Automation | Playwright, APScheduler, MCP |
 | Quality | CI, pre-commit hooks, benchmarks, and 310 unit tests |
 
@@ -164,18 +284,18 @@ See [README_BUILD.md](./README_BUILD.md) for packaging details.
 ```text
 Cortex/
 ├── backend/
-│   ├── agent/          # Agent loop, processors, subagents, memory
+│   ├── agent/          # Agent loop, processors, subagents, and memory
 │   ├── channels/       # Desktop and external messaging channels
-│   ├── core/           # Events, providers, configuration, long tasks
+│   ├── core/           # Events, providers, configuration, and long tasks
 │   ├── data/           # SQLite schemas and migrations
 │   ├── extensions/     # Extension loading and built-ins
 │   ├── mcp/            # MCP connections and tool registry
-│   ├── services/       # Knowledge, workflow, cron, TTS, image, LLM
-│   └── tools/          # Files, shell, browser, memory, knowledge, actions
+│   ├── services/       # Knowledge, workflow, cron, image, and LLM services
+│   └── tools/          # Files, shell, browser, memory, and knowledge tools
 ├── frontend/           # React desktop interface
 ├── electron/           # Electron main and preload processes
 ├── tests/              # Unit tests
-├── benchmarks/         # Performance benchmarks
+├── benchmarks/         # Performance and evaluation scripts
 ├── build/              # Packaging resources
 ├── docker-compose.yml
 ├── Dockerfile
@@ -184,31 +304,33 @@ Cortex/
 
 Runtime user data is written to `workspace/` and excluded from version control.
 
-## Documentation
+## Current status and roadmap
 
-- [Build and release guide](./README_BUILD.md)
-- [Optimization report](./OPTIMIZATION_REPORT.md)
-- [Agent workspace guide](./agents/system/AGENTS.md)
-- [MCP integration](./backend/mcp/README.md)
-- [Browser tools](./backend/tools/browser/README.md)
+The current release includes:
 
-## Current status
-
-Version **1.1.0** currently includes:
-
-- Visual agent and subagent management
-- Visual workflow orchestration
-- Local knowledge workspace and scoped knowledge chat
-- Observation and long-term memory management
+- Agent and subagent management
+- Visual workflows with 16 registered node types
+- Workflow versions and execution traces
+- A local knowledge workspace
+- Observations and long-term memory
 - MCP and Markdown Skill extensions
 - Multi-channel messaging adapters
-- Scheduled and long-running tasks
 - Model routing, recovery, verification, and safety hooks
-- Token analytics, cost budgets, CI, benchmarks, and 310 unit tests
+- Token analytics, cost budgets, CI, benchmarks, and unit tests
+
+Planned areas of focus:
+
+- Workflow templates for product and concept design
+- Side-by-side comparison and recombination of branches
+- Result diffs between workflow versions
+- Reproducible agent evaluation sets and replay
+- Joint analysis of task quality, human intervention, and cost
 
 ## Contributing
 
-Issues and pull requests are welcome. Please keep changes focused, describe user-visible behavior, update tests for logic changes, and never commit API keys or local workspace data.
+Issues and pull requests are welcome. Keep changes focused, describe user-visible behavior, and add tests for logic changes.
+
+Never commit API keys, user workspaces, or local runtime data.
 
 ## License
 
